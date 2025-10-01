@@ -8,15 +8,16 @@ mcp = FastMCP("fideo-app")
 
 # Constants
 FIDEO_API_BASE = "https://api.fideo.ai"
-LOCAL_API_BASE = "http://localhost:8888"
 API_BASE = FIDEO_API_BASE
 # Get the API key from the env variable
 try:
-    FIDEO_API_KEY = os.getenv("FIDEO_API_KEY", default="")
+    # Get a Free Trial for Verify: https://app.fideo.ai/register/offer/github
+    # Contact sales for Signals access: https://fideo.ai/contact-us
+    FIDEO_API_KEY = os.getenv("FIDEO_API_KEY")
 except KeyError:
     sys.exit("Missing required environment variable: FIDEO_API_KEY")
 
-USER_AGENT = "fideo-app/1.0"
+USER_AGENT = "fideo-mcp/1.0"
 
 LOG_PATH = "/tmp/fideo-mcp.log"
 logging.basicConfig(
@@ -81,7 +82,8 @@ def format_request(email: str = "", phone: str = "",
                    region: str = "", region_code: str = "", postal_code: str = "",
                    country: str = "", country_code: str = "",
                    birthday: str = "", ip_address: str = "",
-                   title: str = "", organization: str = "") -> str:
+                   title: str = "", organization: str = "",
+                   social_network: str = "", social_id: str = "", social_handle: str = "") -> str:
     """Format the request data for the Fideo Signals API."""
     req = {
         "email": email,
@@ -101,6 +103,13 @@ def format_request(email: str = "", phone: str = "",
             "country": country,
             "countryCode": country_code,
         },
+        "profiles": [
+            {
+                "service": social_network,
+                "username": social_handle,
+                "userid": social_id
+            }
+        ],
         "birthday": birthday,
         "ipAddress": ip_address,
         "title": title,
@@ -112,66 +121,23 @@ def format_request(email: str = "", phone: str = "",
 
 
 @mcp.tool()
-async def get_verify(email: str, phone: str, first_name: str='', middle_name: str='', last_name: str='',
+async def get_verify(email: str='', phone: str='', first_name: str='', middle_name: str='', last_name: str='',
                      address_line1: str='', address_line2: str='', city: str='', region: str='',
                      region_code: str='', postal_code: str='', country: str='', country_code: str='',
-                     birthday: str='', ip_address: str='', title: str='', organization: str = "",
-                     ) -> str:
-    """Objective: Verify accepts information about a person to perform a high level risk assessment.
-    It's API docs are https://docs.fideo.ai/docs/verify, and provides a risk score (0-100, 0 being
-    lowest) and granular check results based on the following checks:
-    - Synthetic Identity Checks: Compare name, address, email, phone, birthday vs. age, and
-    device/IP linkages against authoritative records. Flags mismatches (e.g. tangled names,
-    mismatched address lines, birthday‑age conflict, excessive connectivity) that indicate
-    fabricated or synthetic profiles.
-    - Breached Identity Checks: Monitor identity exposure via known data breaches. Surface
-    recently compromised identities for credential‑stuffing and takeover risk.
-    - Digital Footprint Checks: Assess coherence and longevity of online signals—social profiles,
-    connectivity patterns, device/IP relationships. Detect absent or anomalous digital presence
-    tied to risk.
-    - Email Checks: Evaluate email deliverability, domain risk, creation date, usage history,
-    format, and account type (e.g. business vs disposable). Flags newly seen, invalid, disposable,
-    or business emails (often fraud vectors).
-    - Identity Checks: Perform coherence checks across identity fields and sanction-list
-    screening (OFAC, EU, UN, UK, Canada). Identify over‑connected or internally
-    inconsistent identities.
-    - IP Address Checks: Classify IP type (TOR, VPN, data center, mobile, residential), check
-    geolocation consistency vs. declared address, detect anonymizer use, cloud hosts, and proxy
-    masking.
-    - Location Checks: Validate street address formatting and existence, distinguish residential
-    vs business/commercial (e.g. P.O. boxes, call centers, drop sites), and assess country-level
-    fraud risk.
-    - Phone Checks: Analyze phone number origin (first_seen), recency (last_seen), format validity,
-    type (business vs personal), porting data, and location match. Detect freshly ported,
-    long-dormant or burner lines.
-    
-    Response includes the risk score and an array of check results, each including:
-    - id: the unique ID of the check that was run
-    - name: the simple name of the check
-    - description: a description of the check intended to be human readable
-    - risk: general risk of the result, being none, low, medium or high
-    - checkPackage: the package containing the check
+                     birthday: str='', ip_address: str='', job_title: str= '', org_name: str = '',
+                     social_network: str = '', social_id: str = '', social_handle: str = '') -> str:
+    """Call Fideo Verify for a risk score and finegrained check-by-check findings each which
+    contributed to the overall risk decision. Checks include email, phone, name, address,
+    synthetic identity, and device/IP analysis.
 
-    Inputs much include a minimum of: email or phone or name & address or ip address
-    Args:
-        email: clear text, md5 or sha256 email addressed to lookup representing a person
-        phone: clear text, e.164 formatted phone number to lookup representing a person
-        first_name: given, or first name of the person
-        middle_name: middle name of the person
-        last_name: family, or last name of the person
-        birthday: Birthday in the form of yyyy-MM-dd, yyyy-MM, MM-dd, yyyy or MM
-        ip_address: Current IP address of the person
-        address_line1: street level address of the person
-        address_line2: extended street level address of the person
-        city: city of the person
-        region: region, or state of the person in full text
-        region_code: region, or state of the person in ISO 2 char code
-        postal_code: postal code of the person's address
-        country: country of the person
-        country_code: country code of the person in ISO 2 char code
-        title: title of the role that the person holds at the organization they work at
-        organization: organization of where the person works
-        profiles[]: SocialProfile with service and username and/or userid
+    Use this tool when you need a fraud or compliance risk assessment about an individual. Supply
+    any identifiers you have; at least one of the following is required for Fideo to run a search:
+    email, phone, name + address, or IP address. More context improves match accuracy.
+
+    Args describe clear-text values unless noted (emails may also be MD5/SHA256 hashes, phones must
+    be E.164). Optional identity, address, and employment fields help Verify link the correct
+    person. The response is returned as a JSON string prefixed with `---` so clients can stream the
+    raw payload.
     """
     url = f"{API_BASE}/verify"
     data = await make_fideo_request(url, format_request(email, phone, first_name, middle_name,
@@ -179,7 +145,8 @@ async def get_verify(email: str, phone: str, first_name: str='', middle_name: st
                                                         city, region, region_code, postal_code,
                                                         country, country_code,
                                                         birthday, ip_address,
-                                                        title, organization))
+                                                        job_title, org_name,
+                                                        social_network, social_id, social_handle))
     if not data:
         return "Error fetching results for verify."
 
@@ -187,49 +154,28 @@ async def get_verify(email: str, phone: str, first_name: str='', middle_name: st
 
 
 @mcp.tool()
-async def get_signals(email: str, phone: str='', first_name: str='', middle_name: str='', last_name: str='',
+async def get_signals(email: str='', phone: str='', first_name: str='', middle_name: str='', last_name: str='',
                       address_line1: str='', address_line2: str='', city: str='', region: str='',
                       region_code: str='', postal_code: str='', country: str='', country_code: str='',
-                      birthday: str='', ip_address: str='', title: str='', organization: str = "",
-                      ) -> str:
-    """Get Fideo Signals (https://docs.fideo.ai/docs/signals) for a given email, or phone number,
-       or name and address. Signals results can contain a variety of information including
-       - social media profiles
-       - connected emails
-       - connected phone numbers
-       - their name and potentially aliases
-       - professional work history
-       - location information of where they live or have lived
-       - ip addresses associated with the person
-       - economic information such as income brackets and net worth
+                      birthday: str='', ip_address: str='', job_title: str= '', org_name: str = "",
+                      social_network: str = '', social_id: str = '', social_handle: str = '') -> str:
+    """Retrieve Fideo Signals profile intelligence about a person. Use cases are investigations,
+    ossint, link analysis, and profile enrichment. Supply any identifiers you have; at least one
+    of the following is required for Fideo to run a search: email, phone, name + address, or
+    social media id/username. More context improves match accuracy.
 
-    Args:
-        email: clear text, md5 or sha256 email addressed to lookup representing a person
-        phone: clear text, e.164 formatted phone number to lookup representing a person
-        first_name: given, or first name of the person
-        middle_name: middle name of the person
-        last_name: family, or last name of the person
-        birthday: Birthday in the form of yyyy-MM-dd, yyyy-MM, MM-dd, yyyy or MM
-        ip_address: Current IP address of the person
-        address_line1: street level address of the person
-        address_line2: extended street level address of the person
-        city: city of the person
-        region: region, or state of the person in full text
-        region_code: region, or state of the person in ISO 2 char code
-        postal_code: postal code of the person's address
-        country: country of the person
-        country_code: country code of the person in ISO 2 char code
-        title: title of the role that the person holds at the organization they work at
-        organization: organization of where the person works
-        profiles[]: SocialProfile with service and username and/or userid
+    Signals enriches the individual with social profiles, linked identities, locations, work
+    history, and other attributes. Provide hashed emails or E.164 phones when you cannot share
+    clear-text data. Returns a JSON string prefixed with `---` containing the API response.
     """
     url = f"{API_BASE}/signals"
     input_payload = format_request(email, phone, first_name, middle_name,
-                   last_name, address_line1, address_line2,
-                   city, region, region_code, postal_code,
-                   country, country_code,
-                   birthday, ip_address,
-                   title, organization)
+                                   last_name, address_line1, address_line2,
+                                   city, region, region_code, postal_code,
+                                   country, country_code,
+                                   birthday, ip_address,
+                                   job_title, org_name,
+                                   social_network, social_id, social_handle)
     data = await make_fideo_request(url, input_payload)
     if not data:
         return "Error fetching results for Signals."
@@ -239,9 +185,9 @@ async def get_signals(email: str, phone: str='', first_name: str='', middle_name
 
 async def test():
     """Test function to run the get_signals tool."""
-    result = await get_signals('ken.michie@gmail.com', '+19702151708')
+    result = await get_signals(social_network='linkedin', social_handle='kenmichie')
     logging.info(result)
-    result = await get_verify('ken.michie@gmail.com', '+19702151708')
+    result = await get_verify(email='')
     logging.info(result)
 
 
