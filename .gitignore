@@ -1,10 +1,22 @@
-# Python-generated files
+# Python and virtual environments
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-.idea/
-# Virtual environments
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+.Python
+.env
 .venv
+
+# OS-specific junk
+.DS_Store
+Thumbs.db
+
+# Tooling metadata
+.python-version
+.idea/
+.vscode/
+
+# MCP / dependency artifacts
+uv.lock
